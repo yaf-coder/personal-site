@@ -12,8 +12,8 @@ import {
   type Body,
 } from "@/lib/physics";
 import {
-  createBodies,
   layoutOrbits,
+  CAMERA_FOV,
   CONFINE,
   COLLISION_RESTITUTION,
   DEFAULT_FIT_RADIUS,
@@ -25,8 +25,10 @@ import {
   SOFTENING,
   STAR_RADIUS,
   SUBSTEPS,
+  SYSTEM_CAMERA_POSITION,
   TIME_SCALE,
 } from "@/lib/system-config";
+import { useSpace } from "@/lib/store";
 import Planet from "./Planet";
 
 /** Mutable state for the body currently held by the pointer. */
@@ -46,19 +48,26 @@ const NDC_CORNERS: [number, number][] = [
   [-1, 1],
 ];
 
-export default function System() {
-  const bodies = useMemo<Body[]>(() => createBodies(), []);
-
+export default function System({ bodies }: { bodies: Body[] }) {
   // Reusable acceleration buffers (no per-frame allocation).
   const accPrev = useRef(bodies.map(() => new THREE.Vector3()));
   const accScratch = useRef(bodies.map(() => new THREE.Vector3()));
 
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   const grab = useRef<GrabState | null>(null);
+  /** Bodies excluded from integration this frame: grabbed, hovered, docked. */
+  const frozen = useRef(new Set<number>());
 
   const { camera, pointer, size } = useThree();
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const pointerWorld = useRef(new THREE.Vector3());
+  const idToIndex = useMemo(
+    () => new Map(bodies.map((b, i) => [b.id, i] as const)),
+    [bodies],
+  );
+
+  const dock = useSpace((s) => s.dock);
+  const goHome = useSpace((s) => s.goHome);
 
   // Star-only gravity (index 0), reused by both the seed and the integrator.
   const accel = useMemo(
@@ -71,13 +80,21 @@ export default function System() {
   const rMin = STAR_RADIUS + R_MIN_MARGIN;
   const rMax = useRef(DEFAULT_FIT_RADIUS);
 
-  /** Project the viewport corners onto the orbit plane -> largest fitting orbit. */
+  // The live camera parks on the sun or a planet, so the fit is measured from a
+  // scratch camera at the system-overview pose. Only runs on mount/resize, so
+  // constructing it per call is fine (and keeps render-scope values immutable).
   function measureFitRadius(): number {
+    const fitCam = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 500);
+    fitCam.aspect = size.width / size.height;
+    fitCam.position.copy(SYSTEM_CAMERA_POSITION);
+    fitCam.lookAt(0, 0, 0);
+    fitCam.updateProjectionMatrix();
+    fitCam.updateMatrixWorld();
     const ndc = new THREE.Vector2();
     const corners: THREE.Vector3[] = [];
     for (const [x, y] of NDC_CORNERS) {
       ndc.set(x, y);
-      raycaster.setFromCamera(ndc, camera);
+      raycaster.setFromCamera(ndc, fitCam);
       const hit = new THREE.Vector3();
       if (!raycaster.ray.intersectPlane(ORBIT_PLANE, hit)) return rMax.current;
       corners.push(hit);
@@ -90,7 +107,6 @@ export default function System() {
   // the real viewport and seed accelerations before the first painted frame.
   const laidOut = useRef(false);
   useEffect(() => {
-    camera.updateMatrixWorld();
     rMax.current = measureFitRadius();
     if (!laidOut.current) {
       layoutOrbits(bodies, rMin, rMax.current);
@@ -121,6 +137,8 @@ export default function System() {
   }, [bodies]);
 
   function handleGrab(index: number) {
+    const { view, transition } = useSpace.getState();
+    if (view !== "system" || transition) return; // playground input only when idle in system view
     if (bodies[index].fixed) return; // the star (you) stays anchored
     raycaster.setFromCamera(pointer, camera);
     const hit = new THREE.Vector3();
@@ -132,37 +150,42 @@ export default function System() {
     const dt = Math.min(delta, 1 / 30) * TIME_SCALE;
     if (dt <= 0) return;
 
-    // Current pointer position on the orbit plane.
-    raycaster.setFromCamera(pointer, camera);
-    raycaster.ray.intersectPlane(ORBIT_PLANE, pointerWorld.current);
+    // Assemble this frame's frozen set: grabbed + hovered + docked bodies.
+    const { hoveredId, focusedId } = useSpace.getState();
+    frozen.current.clear();
+    const g = grab.current;
+    if (g) frozen.current.add(g.index);
+    const hi = hoveredId ? idToIndex.get(hoveredId) : undefined;
+    if (hi !== undefined) frozen.current.add(hi);
+    const fi = focusedId ? idToIndex.get(focusedId) : undefined;
+    if (fi !== undefined) frozen.current.add(fi);
 
     // Drive the grabbed body toward the pointer and estimate its fling velocity.
-    const g = grab.current;
     if (g) {
-      const body = bodies[g.index];
-      const instVel = pointerWorld.current.clone().sub(g.lastPointer).multiplyScalar(1 / dt);
-      g.velocity.lerp(instVel, 0.35);
-      g.lastPointer.copy(pointerWorld.current);
-      body.position.lerp(pointerWorld.current, 0.4);
-      body.velocity.set(0, 0, 0);
+      raycaster.setFromCamera(pointer, camera);
+      if (raycaster.ray.intersectPlane(ORBIT_PLANE, pointerWorld.current)) {
+        const body = bodies[g.index];
+        const instVel = pointerWorld.current.clone().sub(g.lastPointer).multiplyScalar(1 / dt);
+        g.velocity.lerp(instVel, 0.35);
+        g.lastPointer.copy(pointerWorld.current);
+        body.position.lerp(pointerWorld.current, 0.4);
+        body.velocity.set(0, 0, 0);
+      }
     }
 
     // Integrate gravity in sub-steps for stability.
     const h = dt / SUBSTEPS;
-    const skip = g ? g.index : -1;
     for (let s = 0; s < SUBSTEPS; s++) {
-      stepVerlet(bodies, h, accPrev.current, accScratch.current, skip, accel);
+      stepVerlet(bodies, h, accPrev.current, accScratch.current, frozen.current, accel);
     }
 
     // Keep the system on screen and let bodies bump into each other.
-    resolveCollisions(bodies, COLLISION_RESTITUTION, skip);
-    applyScreenConfinement(bodies, {
-      ...CONFINE,
-      rMin,
-      rMax: rMax.current,
-      dt,
-      skipIndex: skip,
-    });
+    resolveCollisions(bodies, COLLISION_RESTITUTION, frozen.current);
+    applyScreenConfinement(
+      bodies,
+      { ...CONFINE, rMin, rMax: rMax.current, dt },
+      frozen.current,
+    );
 
     // Push simulated positions onto the meshes.
     for (let i = 0; i < bodies.length; i++) {
@@ -177,6 +200,7 @@ export default function System() {
       bodies,
       rMin,
       getRMax: () => rMax.current,
+      store: useSpace,
     };
   }, [bodies, rMin]);
 
@@ -192,6 +216,7 @@ export default function System() {
             meshRefs.current[i] = el;
           }}
           onGrab={() => handleGrab(i)}
+          onSelect={i === 0 ? goHome : () => dock(body.id)}
         />
       ))}
     </>

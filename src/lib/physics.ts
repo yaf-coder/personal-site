@@ -84,22 +84,22 @@ export function computeCentralAccelerations(
 /**
  * One velocity-Verlet step. `accel(out)` fills `out` with a(t+dt) for the given
  * positions. `accPrev` holds a(t) on entry and a(t+dt) on exit, so the caller
- * can feed it straight back into the next step. Fixed and `skipIndex` (grabbed)
- * bodies are not integrated.
+ * can feed it straight back into the next step. Fixed and `frozen` bodies
+ * (grabbed / hovered / docked) are not integrated.
  */
 export function stepVerlet(
   bodies: Body[],
   dt: number,
   accPrev: THREE.Vector3[],
   accScratch: THREE.Vector3[],
-  skipIndex: number,
+  frozen: ReadonlySet<number>,
   accel: (out: THREE.Vector3[]) => void,
 ): void {
   const halfDtSq = 0.5 * dt * dt;
   // x(t+dt) = x + v*dt + 0.5*a*dt^2
   for (let i = 0; i < bodies.length; i++) {
     const b = bodies[i];
-    if (b.fixed || i === skipIndex) continue;
+    if (b.fixed || frozen.has(i)) continue;
     b.position.addScaledVector(b.velocity, dt).addScaledVector(accPrev[i], halfDtSq);
   }
 
@@ -109,7 +109,7 @@ export function stepVerlet(
   // v(t+dt) = v + 0.5*(a(t) + a(t+dt))*dt
   for (let i = 0; i < bodies.length; i++) {
     const b = bodies[i];
-    if (b.fixed || i === skipIndex) continue;
+    if (b.fixed || frozen.has(i)) continue;
     b.velocity.addScaledVector(accPrev[i], halfDt).addScaledVector(accScratch[i], halfDt);
     // Roll a(t+dt) into accPrev for the next step.
     accPrev[i].copy(accScratch[i]);
@@ -155,14 +155,16 @@ export interface ConfineOptions {
   maxSpeed: number;
   /** Sim timestep for this frame (spring/damping integration). */
   dt: number;
-  /** Body under pointer control — left untouched. */
-  skipIndex: number;
 }
 
-export function applyScreenConfinement(bodies: Body[], o: ConfineOptions): void {
+export function applyScreenConfinement(
+  bodies: Body[],
+  o: ConfineOptions,
+  frozen: ReadonlySet<number>,
+): void {
   for (let i = 0; i < bodies.length; i++) {
     const b = bodies[i];
-    if (b.fixed || i === o.skipIndex) continue;
+    if (b.fixed || frozen.has(i)) continue;
 
     const rx = b.position.x;
     const rz = b.position.z;
@@ -211,20 +213,21 @@ export function applyScreenConfinement(bodies: Body[], o: ConfineOptions): void 
 
 /**
  * Resolve sphere-sphere collisions on the XZ plane with positional correction
- * and an impulse response weighted by mass. Fixed bodies (the star) and the
- * grabbed body act as immovable, so planets bounce off them and off each other.
+ * and an impulse response weighted by mass. Fixed bodies (the star) and frozen
+ * bodies (grabbed / hovered / docked) act as immovable, so planets bounce off
+ * them and off each other.
  */
 export function resolveCollisions(
   bodies: Body[],
   restitution: number,
-  skipIndex: number,
+  frozen: ReadonlySet<number>,
 ): void {
   for (let i = 0; i < bodies.length; i++) {
     const bi = bodies[i];
-    const invI = bi.fixed || i === skipIndex ? 0 : 1 / bi.mass;
+    const invI = bi.fixed || frozen.has(i) ? 0 : 1 / bi.mass;
     for (let j = i + 1; j < bodies.length; j++) {
       const bj = bodies[j];
-      const invJ = bj.fixed || j === skipIndex ? 0 : 1 / bj.mass;
+      const invJ = bj.fixed || frozen.has(j) ? 0 : 1 / bj.mass;
       const invSum = invI + invJ;
       if (invSum === 0) continue;
 

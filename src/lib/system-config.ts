@@ -18,6 +18,11 @@ export const MAX_FLING_SPEED = 90;
 const STAR_MASS = 2600;
 export const STAR_RADIUS = 2.4;
 
+/* --- Camera --- */
+export const CAMERA_FOV = 50;
+/** The system-overview camera pose; also defines the zoom-out axis from the sun. */
+export const SYSTEM_CAMERA_POSITION = new THREE.Vector3(0, 22, 30);
+
 /* --- Screen-fit confinement tuning (see applyScreenConfinement) --- */
 /** Fraction of the inscribed screen radius used as the outer orbit band. */
 export const ORBIT_FIT_FACTOR = 0.9;
@@ -28,7 +33,7 @@ export const DEFAULT_FIT_RADIUS = 12;
 /** Never let the band collapse below this, even on tiny screens. */
 export const MIN_FIT_RADIUS = 6;
 
-export const CONFINE: Omit<ConfineOptions, "rMin" | "rMax" | "dt" | "skipIndex"> = {
+export const CONFINE: Omit<ConfineOptions, "rMin" | "rMax" | "dt"> = {
   G,
   starMass: STAR_MASS,
   restitution: 1, // perfectly elastic inner wall
@@ -41,7 +46,7 @@ export const CONFINE: Omit<ConfineOptions, "rMin" | "rMax" | "dt" | "skipIndex">
 /** Perfectly elastic — bumps conserve energy, no orbital decay. */
 export const COLLISION_RESTITUTION = 1;
 
-interface Placeholder {
+export interface PlanetDef {
   id: string;
   name: string;
   /** Orbital slot in [0,1]: 0 = innermost band, 1 = outermost. */
@@ -49,15 +54,49 @@ interface Placeholder {
   radius: number;
   mass: number;
   color: string;
+  /** Project card content (placeholder until real content lands). */
+  tagline: string;
+  blurb: string;
+  tech: string[];
 }
 
 /** Placeholder projects — swapped for real content in a later phase. */
-const PLANETS: Placeholder[] = [
-  { id: "p1", name: "Project Alpha", slot: 0.06, radius: 0.8, mass: 30, color: "#c96f4a" },
-  { id: "p2", name: "Project Beta", slot: 0.3, radius: 1.1, mass: 55, color: "#5b8fb0" },
-  { id: "p3", name: "Project Gamma", slot: 0.52, radius: 0.95, mass: 42, color: "#b0a06a" },
-  { id: "p4", name: "Project Delta", slot: 0.76, radius: 1.35, mass: 70, color: "#7d6bb0" },
-  { id: "p5", name: "Project Epsilon", slot: 1.0, radius: 0.7, mass: 22, color: "#9fb08a" },
+export const PLANET_DEFS: PlanetDef[] = [
+  {
+    id: "p1", name: "Project Alpha", slot: 0.06, radius: 0.8, mass: 30, color: "#c96f4a",
+    tagline: "distributed systems",
+    blurb:
+      "Placeholder case study. A short paragraph about what this project is, the problem it solves, and the interesting engineering underneath. Real content lands here later.",
+    tech: ["Go", "Kafka", "Postgres"],
+  },
+  {
+    id: "p2", name: "Project Beta", slot: 0.3, radius: 1.1, mass: 55, color: "#5b8fb0",
+    tagline: "full-stack product",
+    blurb:
+      "Placeholder case study. What it does, who used it, and the hard part you solved. Swap in the real story when ready.",
+    tech: ["TypeScript", "Next.js", "tRPC"],
+  },
+  {
+    id: "p3", name: "Project Gamma", slot: 0.52, radius: 0.95, mass: 42, color: "#b0a06a",
+    tagline: "data & ML pipeline",
+    blurb:
+      "Placeholder case study. Throughput numbers, architecture choices, and the tradeoffs behind them go here.",
+    tech: ["Python", "Airflow", "BigQuery"],
+  },
+  {
+    id: "p4", name: "Project Delta", slot: 0.76, radius: 1.35, mass: 70, color: "#7d6bb0",
+    tagline: "infrastructure",
+    blurb:
+      "Placeholder case study. The biggest planet gets the flagship project — describe scale, reliability, and impact.",
+    tech: ["Kubernetes", "Terraform", "AWS"],
+  },
+  {
+    id: "p5", name: "Project Epsilon", slot: 1.0, radius: 0.7, mass: 22, color: "#9fb08a",
+    tagline: "side quest",
+    blurb:
+      "Placeholder case study. A small, fun one — a tool, a game, a hack that shows range.",
+    tech: ["Rust", "WASM"],
+  },
 ];
 
 /**
@@ -101,7 +140,7 @@ export function createBodies(): Body[] {
     },
   ];
 
-  for (const p of PLANETS) {
+  for (const p of PLANET_DEFS) {
     bodies.push({
       id: p.id,
       name: p.name,
