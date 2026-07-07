@@ -187,9 +187,12 @@ export default function System({ bodies }: { bodies: Body[] }) {
       frozen.current,
     );
 
-    // Push simulated positions onto the meshes.
+    // Push simulated positions onto the meshes + cosmetic axial spin.
     for (let i = 0; i < bodies.length; i++) {
-      meshRefs.current[i]?.position.copy(bodies[i].position);
+      const mesh = meshRefs.current[i];
+      if (!mesh) continue;
+      mesh.position.copy(bodies[i].position);
+      mesh.rotation.y += (bodies[i].spin ?? 0) * delta;
     }
   });
 
@@ -206,7 +209,9 @@ export default function System({ bodies }: { bodies: Body[] }) {
 
   return (
     <>
-      <pointLight position={[0, 0, 0]} intensity={450} decay={2} color="#ffe6bf" />
+      {/* decay 0 = uniform "astrophoto exposure" across the whole band, and it
+          keeps lit planet surfaces below the bloom threshold (sun-only bloom). */}
+      <pointLight position={[0, 0, 0]} intensity={2.3} decay={0} color="#ffe6bf" />
       {bodies.map((body, i) => (
         <Planet
           key={body.id}

@@ -19,7 +19,7 @@ export default function Overlays() {
 
   return (
     <div className="fade-in pointer-events-none absolute inset-x-0 top-0 z-10 p-6 md:p-10">
-      <h1 className="font-mono text-sm uppercase tracking-[0.3em] text-white/70">Your Name</h1>
+      <h1 className="font-mono text-sm uppercase tracking-[0.3em] text-white/70">Yafee Khan</h1>
       <p className="mt-2 font-mono text-xs text-white/40">
         hover to pause · click a planet to visit · drag to fling · click the sun to go home
       </p>

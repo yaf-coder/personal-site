@@ -19,6 +19,10 @@ export interface Body {
   orbitSlot?: number;
   /** Resting orbit radius this planet is stabilized toward (set at layout). */
   homeRadius?: number;
+  /** Equirectangular surface texture (public path). */
+  texture?: string;
+  /** Axial spin rate (rad/s of wall time), purely cosmetic. */
+  spin?: number;
 }
 
 const _dir = new THREE.Vector3();

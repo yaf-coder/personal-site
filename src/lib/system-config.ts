@@ -53,45 +53,58 @@ export interface PlanetDef {
   slot: number;
   radius: number;
   mass: number;
+  /** Overlay tint — matched to the texture's dominant hue. */
   color: string;
+  /** Equirectangular surface map (Solar System Scope, CC BY 4.0). */
+  texture: string;
+  /** Axial spin (rad/s wall time), cosmetic. */
+  spin: number;
   /** Project card content (placeholder until real content lands). */
   tagline: string;
   blurb: string;
   tech: string[];
 }
 
+export const SUN_TEXTURE = "/textures/2k_sun.jpg";
+export const SKY_TEXTURE = "/textures/8k_stars_milky_way.jpg";
+
 /** Placeholder projects — swapped for real content in a later phase. */
 export const PLANET_DEFS: PlanetDef[] = [
   {
-    id: "p1", name: "Project Alpha", slot: 0.06, radius: 0.8, mass: 30, color: "#c96f4a",
+    id: "p1", name: "Project Alpha", slot: 0.06, radius: 0.8, mass: 30, color: "#9c4f2e",
+    texture: "/textures/2k_mars.jpg", spin: 0.14,
     tagline: "distributed systems",
     blurb:
       "Placeholder case study. A short paragraph about what this project is, the problem it solves, and the interesting engineering underneath. Real content lands here later.",
     tech: ["Go", "Kafka", "Postgres"],
   },
   {
-    id: "p2", name: "Project Beta", slot: 0.3, radius: 1.1, mass: 55, color: "#5b8fb0",
+    id: "p2", name: "Project Beta", slot: 0.3, radius: 1.1, mass: 55, color: "#33538f",
+    texture: "/textures/2k_neptune.jpg", spin: 0.1,
     tagline: "full-stack product",
     blurb:
       "Placeholder case study. What it does, who used it, and the hard part you solved. Swap in the real story when ready.",
     tech: ["TypeScript", "Next.js", "tRPC"],
   },
   {
-    id: "p3", name: "Project Gamma", slot: 0.52, radius: 0.95, mass: 42, color: "#b0a06a",
+    id: "p3", name: "Project Gamma", slot: 0.52, radius: 0.95, mass: 42, color: "#a3823f",
+    texture: "/textures/2k_venus_atmosphere.jpg", spin: 0.06,
     tagline: "data & ML pipeline",
     blurb:
       "Placeholder case study. Throughput numbers, architecture choices, and the tradeoffs behind them go here.",
     tech: ["Python", "Airflow", "BigQuery"],
   },
   {
-    id: "p4", name: "Project Delta", slot: 0.76, radius: 1.35, mass: 70, color: "#7d6bb0",
+    id: "p4", name: "Project Delta", slot: 0.76, radius: 1.35, mass: 70, color: "#8a6a4f",
+    texture: "/textures/2k_jupiter.jpg", spin: 0.18,
     tagline: "infrastructure",
     blurb:
       "Placeholder case study. The biggest planet gets the flagship project — describe scale, reliability, and impact.",
     tech: ["Kubernetes", "Terraform", "AWS"],
   },
   {
-    id: "p5", name: "Project Epsilon", slot: 1.0, radius: 0.7, mass: 22, color: "#9fb08a",
+    id: "p5", name: "Project Epsilon", slot: 1.0, radius: 0.7, mass: 22, color: "#4f8a8f",
+    texture: "/textures/2k_uranus.jpg", spin: 0.12,
     tagline: "side quest",
     blurb:
       "Placeholder case study. A small, fun one — a tool, a game, a hack that shows range.",
@@ -134,6 +147,8 @@ export function createBodies(): Body[] {
       mass: STAR_MASS,
       radius: STAR_RADIUS,
       color: "#ffd9a0",
+      texture: SUN_TEXTURE,
+      spin: 0.015,
       fixed: true,
       position: new THREE.Vector3(0, 0, 0),
       velocity: new THREE.Vector3(0, 0, 0),
@@ -147,6 +162,8 @@ export function createBodies(): Body[] {
       mass: p.mass,
       radius: p.radius,
       color: p.color,
+      texture: p.texture,
+      spin: p.spin,
       orbitSlot: p.slot,
       position: new THREE.Vector3(),
       velocity: new THREE.Vector3(),
