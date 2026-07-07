@@ -1,0 +1,199 @@
+"use client";
+
+import { useEffect, useMemo, useRef } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
+import {
+  applyScreenConfinement,
+  computeCentralAccelerations,
+  inscribedRadius,
+  resolveCollisions,
+  stepVerlet,
+  type Body,
+} from "@/lib/physics";
+import {
+  createBodies,
+  layoutOrbits,
+  CONFINE,
+  COLLISION_RESTITUTION,
+  DEFAULT_FIT_RADIUS,
+  G,
+  MAX_FLING_SPEED,
+  MIN_FIT_RADIUS,
+  ORBIT_FIT_FACTOR,
+  R_MIN_MARGIN,
+  SOFTENING,
+  STAR_RADIUS,
+  SUBSTEPS,
+  TIME_SCALE,
+} from "@/lib/system-config";
+import Planet from "./Planet";
+
+/** Mutable state for the body currently held by the pointer. */
+interface GrabState {
+  index: number;
+  /** Pointer world position last frame — used to derive fling velocity. */
+  lastPointer: THREE.Vector3;
+  /** Smoothed release velocity (sim units/s). */
+  velocity: THREE.Vector3;
+}
+
+const ORBIT_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const NDC_CORNERS: [number, number][] = [
+  [-1, -1],
+  [1, -1],
+  [1, 1],
+  [-1, 1],
+];
+
+export default function System() {
+  const bodies = useMemo<Body[]>(() => createBodies(), []);
+
+  // Reusable acceleration buffers (no per-frame allocation).
+  const accPrev = useRef(bodies.map(() => new THREE.Vector3()));
+  const accScratch = useRef(bodies.map(() => new THREE.Vector3()));
+
+  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const grab = useRef<GrabState | null>(null);
+
+  const { camera, pointer, size } = useThree();
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const pointerWorld = useRef(new THREE.Vector3());
+
+  // Star-only gravity (index 0), reused by both the seed and the integrator.
+  const accel = useMemo(
+    () => (out: THREE.Vector3[]) => computeCentralAccelerations(bodies, 0, G, SOFTENING, out),
+    [bodies],
+  );
+
+  // Screen-fit band. rMin is fixed (clearance around the star); rMax is measured
+  // from the viewport each mount/resize.
+  const rMin = STAR_RADIUS + R_MIN_MARGIN;
+  const rMax = useRef(DEFAULT_FIT_RADIUS);
+
+  /** Project the viewport corners onto the orbit plane -> largest fitting orbit. */
+  function measureFitRadius(): number {
+    const ndc = new THREE.Vector2();
+    const corners: THREE.Vector3[] = [];
+    for (const [x, y] of NDC_CORNERS) {
+      ndc.set(x, y);
+      raycaster.setFromCamera(ndc, camera);
+      const hit = new THREE.Vector3();
+      if (!raycaster.ray.intersectPlane(ORBIT_PLANE, hit)) return rMax.current;
+      corners.push(hit);
+    }
+    const fit = inscribedRadius(corners) * ORBIT_FIT_FACTOR;
+    return Math.max(fit, MIN_FIT_RADIUS);
+  }
+
+  // Measure the screen on mount + resize. On first mount, re-fit the orbits to
+  // the real viewport and seed accelerations before the first painted frame.
+  const laidOut = useRef(false);
+  useEffect(() => {
+    camera.updateMatrixWorld();
+    rMax.current = measureFitRadius();
+    if (!laidOut.current) {
+      layoutOrbits(bodies, rMin, rMax.current);
+      accel(accPrev.current);
+      for (let i = 0; i < bodies.length; i++) {
+        meshRefs.current[i]?.position.copy(bodies[i].position);
+      }
+      laidOut.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.width, size.height]);
+
+  // Release the grabbed body anywhere the pointer lifts (even off a planet).
+  useEffect(() => {
+    function release() {
+      const g = grab.current;
+      if (!g) return;
+      bodies[g.index].velocity.copy(g.velocity).clampLength(0, MAX_FLING_SPEED);
+      grab.current = null;
+      document.body.style.cursor = "auto";
+    }
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
+  }, [bodies]);
+
+  function handleGrab(index: number) {
+    if (bodies[index].fixed) return; // the star (you) stays anchored
+    raycaster.setFromCamera(pointer, camera);
+    const hit = new THREE.Vector3();
+    raycaster.ray.intersectPlane(ORBIT_PLANE, hit);
+    grab.current = { index, lastPointer: hit.clone(), velocity: new THREE.Vector3() };
+  }
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 1 / 30) * TIME_SCALE;
+    if (dt <= 0) return;
+
+    // Current pointer position on the orbit plane.
+    raycaster.setFromCamera(pointer, camera);
+    raycaster.ray.intersectPlane(ORBIT_PLANE, pointerWorld.current);
+
+    // Drive the grabbed body toward the pointer and estimate its fling velocity.
+    const g = grab.current;
+    if (g) {
+      const body = bodies[g.index];
+      const instVel = pointerWorld.current.clone().sub(g.lastPointer).multiplyScalar(1 / dt);
+      g.velocity.lerp(instVel, 0.35);
+      g.lastPointer.copy(pointerWorld.current);
+      body.position.lerp(pointerWorld.current, 0.4);
+      body.velocity.set(0, 0, 0);
+    }
+
+    // Integrate gravity in sub-steps for stability.
+    const h = dt / SUBSTEPS;
+    const skip = g ? g.index : -1;
+    for (let s = 0; s < SUBSTEPS; s++) {
+      stepVerlet(bodies, h, accPrev.current, accScratch.current, skip, accel);
+    }
+
+    // Keep the system on screen and let bodies bump into each other.
+    resolveCollisions(bodies, COLLISION_RESTITUTION, skip);
+    applyScreenConfinement(bodies, {
+      ...CONFINE,
+      rMin,
+      rMax: rMax.current,
+      dt,
+      skipIndex: skip,
+    });
+
+    // Push simulated positions onto the meshes.
+    for (let i = 0; i < bodies.length; i++) {
+      meshRefs.current[i]?.position.copy(bodies[i].position);
+    }
+  });
+
+  // Dev-only debug handle for tuning/verifying the sim from the console.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __sim?: unknown }).__sim = {
+      bodies,
+      rMin,
+      getRMax: () => rMax.current,
+    };
+  }, [bodies, rMin]);
+
+  return (
+    <>
+      <pointLight position={[0, 0, 0]} intensity={450} decay={2} color="#ffe6bf" />
+      {bodies.map((body, i) => (
+        <Planet
+          key={body.id}
+          body={body}
+          isStar={i === 0}
+          ref={(el) => {
+            meshRefs.current[i] = el;
+          }}
+          onGrab={() => handleGrab(i)}
+        />
+      ))}
+    </>
+  );
+}
