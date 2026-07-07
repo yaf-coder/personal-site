@@ -16,10 +16,26 @@ import {
   createBodies,
   CAMERA_FOV,
   SKY_TEXTURE,
+  STAR_RADIUS,
   SYSTEM_CAMERA_POSITION,
 } from "@/lib/system-config";
 import System from "./System";
 import CameraRig from "./CameraRig";
+
+/**
+ * Shown (via Suspense) while the textures download. The app opens parked on the
+ * sun, so a plain sun-colored sphere at the origin fills the viewport with a
+ * warm glow instead of a black flash; the detailed texture swaps in seamlessly
+ * once loaded.
+ */
+function SunFallback() {
+  return (
+    <mesh>
+      <sphereGeometry args={[STAR_RADIUS, 32, 32]} />
+      <meshBasicMaterial color="#e6913c" toneMapped={false} />
+    </mesh>
+  );
+}
 
 /**
  * Milky Way panorama on an inward-facing sphere, dimmed well below the bloom
@@ -67,7 +83,7 @@ export default function Scene() {
     >
       <color attach="background" args={["#05060a"]} />
       <ambientLight intensity={0.4} />
-      <Suspense fallback={null}>
+      <Suspense fallback={<SunFallback />}>
         <SkyDome />
         <Stars radius={220} depth={80} count={7000} factor={4.5} saturation={0} fade speed={0.4} />
         <System bodies={bodies} />

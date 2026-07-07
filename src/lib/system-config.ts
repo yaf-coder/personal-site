@@ -66,7 +66,7 @@ export interface PlanetDef {
 }
 
 export const SUN_TEXTURE = "/textures/2k_sun.jpg";
-export const SKY_TEXTURE = "/textures/8k_stars_milky_way.jpg";
+export const SKY_TEXTURE = "/textures/4k_stars_milky_way.jpg";
 
 /** Placeholder projects — swapped for real content in a later phase. */
 export const PLANET_DEFS: PlanetDef[] = [
