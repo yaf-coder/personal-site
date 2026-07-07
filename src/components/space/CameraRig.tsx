@@ -19,8 +19,16 @@ const ZOOM_AXIS = SYSTEM_CAMERA_POSITION.clone().normalize();
 function fillDistance(cam: THREE.PerspectiveCamera, radius: number, overfill: number): number {
   const v = THREE.MathUtils.degToRad(cam.fov) / 2;
   const h = Math.atan(Math.tan(v) * cam.aspect);
-  return radius / Math.sin(Math.max(v, h)) / overfill;
+  const fit = radius / Math.sin(Math.max(v, h)) / overfill;
+  // Guard: on wide viewports the overfill math can demand a distance smaller
+  // than the radius, which would put the camera *inside* the sphere (front
+  // faces cull -> you see straight through it). Never get closer than a safe
+  // margin outside the surface; that near view still overfills the screen.
+  return Math.max(fit, radius * SAFE_DISTANCE_FACTOR);
 }
+
+/** Minimum camera distance as a multiple of a body's radius (keeps it outside). */
+const SAFE_DISTANCE_FACTOR = 1.2;
 
 /**
  * Overfill margins. The sun's is generous so the home close-up camera sits well
