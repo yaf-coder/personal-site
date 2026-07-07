@@ -31,8 +31,12 @@ jobs:
           node-version: 24
           cache: npm
 
+      # `npm install`, not `npm ci`: the lockfile can't record the Linux-only
+      # @emnapi/* optional deps (sub-deps of a WASM binding that macOS never
+      # installs), so `npm ci`'s strict validation fails on the runner. Plain
+      # install resolves correctly for the runner platform.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build static export
         run: npm run build
