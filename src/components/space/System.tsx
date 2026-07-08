@@ -30,6 +30,7 @@ import {
 } from "@/lib/system-config";
 import { useSpace } from "@/lib/store";
 import Planet from "./Planet";
+import PlanetLabel from "./PlanetLabel";
 
 /** Mutable state for the body currently held by the pointer. */
 interface GrabState {
@@ -54,6 +55,7 @@ export default function System({ bodies }: { bodies: Body[] }) {
   const accScratch = useRef(bodies.map(() => new THREE.Vector3()));
 
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const labelRefs = useRef<(THREE.Group | null)[]>([]);
   const grab = useRef<GrabState | null>(null);
   /** Bodies excluded from integration this frame: grabbed, hovered, docked. */
   const frozen = useRef(new Set<number>());
@@ -151,7 +153,7 @@ export default function System({ bodies }: { bodies: Body[] }) {
     if (dt <= 0) return;
 
     // Assemble this frame's frozen set: grabbed + hovered + docked bodies.
-    const { hoveredId, focusedId } = useSpace.getState();
+    const { hoveredId, focusedId, view } = useSpace.getState();
     frozen.current.clear();
     const g = grab.current;
     if (g) frozen.current.add(g.index);
@@ -188,11 +190,26 @@ export default function System({ bodies }: { bodies: Body[] }) {
     );
 
     // Push simulated positions onto the meshes + cosmetic axial spin.
+    // Titles float above their planet, but only while browsing the system view.
+    const showLabels = view === "system";
     for (let i = 0; i < bodies.length; i++) {
+      const body = bodies[i];
       const mesh = meshRefs.current[i];
-      if (!mesh) continue;
-      mesh.position.copy(bodies[i].position);
-      mesh.rotation.y += (bodies[i].spin ?? 0) * delta;
+      if (mesh) {
+        mesh.position.copy(body.position);
+        mesh.rotation.y += (body.spin ?? 0) * delta;
+      }
+      const label = labelRefs.current[i];
+      if (label) {
+        label.visible = showLabels;
+        if (showLabels) {
+          label.position.set(
+            body.position.x,
+            body.position.y + body.radius * 1.5,
+            body.position.z,
+          );
+        }
+      }
     }
   });
 
@@ -224,6 +241,17 @@ export default function System({ bodies }: { bodies: Body[] }) {
           onSelect={i === 0 ? goHome : () => dock(body.id)}
         />
       ))}
+      {bodies.map((body, i) =>
+        i === 0 ? null : (
+          <PlanetLabel
+            key={`label-${body.id}`}
+            body={body}
+            ref={(el) => {
+              labelRefs.current[i] = el;
+            }}
+          />
+        ),
+      )}
     </>
   );
 }
