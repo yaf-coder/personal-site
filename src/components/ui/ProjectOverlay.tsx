@@ -32,17 +32,38 @@ export default function ProjectOverlay() {
             {def.tagline}
           </p>
           <h2 className="mt-3 text-4xl font-semibold text-white md:text-6xl">{def.name}</h2>
-          <p className="mt-6 leading-relaxed text-white/85">{def.blurb}</p>
-          <ul className="mt-8 flex flex-wrap gap-2">
-            {def.tech.map((t) => (
-              <li
-                key={t}
-                className="rounded-full border border-white/30 px-3 py-1 font-mono text-xs text-white/85"
-              >
-                {t}
-              </li>
+          <div className="mt-6 space-y-4">
+            {def.blurb.map((para, i) => (
+              <p key={i} className="leading-relaxed text-white/85">
+                {para}
+              </p>
             ))}
-          </ul>
+          </div>
+          {!def.pitchOnly && def.tech.length > 0 && (
+            <ul className="mt-8 flex flex-wrap gap-2">
+              {def.tech.map((t) => (
+                <li
+                  key={t}
+                  className="rounded-full border border-white/30 px-3 py-1 font-mono text-xs text-white/85"
+                >
+                  {t}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!def.pitchOnly && def.github && (
+            <a
+              href={def.github}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group mt-8 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.3em] text-white/70 transition-colors hover:text-white"
+            >
+              view source on github
+              <span className="inline-block transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5">
+                ↗
+              </span>
+            </a>
+          )}
         </div>
       </div>
     </div>

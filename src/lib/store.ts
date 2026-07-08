@@ -11,13 +11,15 @@ import { create } from "zustand";
  * flying between views (CameraRig runs the flight and calls commitTransition).
  * All actions are guarded so invalid moves (e.g. docking mid-flight) no-op.
  */
-export type View = "sun" | "system" | "planet";
+export type View = "sun" | "system" | "planet" | "directory";
 
 export type Transition =
   | { kind: "sun-to-system" }
   | { kind: "system-to-sun" }
   | { kind: "dock"; id: string }
-  | { kind: "undock" };
+  | { kind: "undock" }
+  | { kind: "to-directory" }
+  | { kind: "directory-to-system" };
 
 interface SpaceState {
   view: View;
@@ -30,6 +32,8 @@ interface SpaceState {
   goHome: () => void;
   dock: (id: string) => void;
   undock: () => void;
+  openDirectory: () => void;
+  closeDirectory: () => void;
   setHovered: (id: string | null) => void;
   commitTransition: () => void;
 }
@@ -64,6 +68,20 @@ export const useSpace = create<SpaceState>((set, get) => ({
     set({ transition: { kind: "undock" } });
   },
 
+  // Open the technical directory from the solar-system view — the camera drifts
+  // off into empty space and the directory renders over the starfield.
+  openDirectory: () => {
+    const { view, transition } = get();
+    if (view !== "system" || transition) return;
+    set({ transition: { kind: "to-directory" }, focusedId: null });
+  },
+
+  closeDirectory: () => {
+    const { view, transition } = get();
+    if (view !== "directory" || transition) return;
+    set({ transition: { kind: "directory-to-system" } });
+  },
+
   setHovered: (id) => {
     const { view, transition } = get();
     // Always allow clearing; only allow setting while idle in the system view.
@@ -84,6 +102,12 @@ export const useSpace = create<SpaceState>((set, get) => ({
         break;
       case "dock":
         set({ view: "planet", transition: null });
+        break;
+      case "to-directory":
+        set({ view: "directory", transition: null, focusedId: null });
+        break;
+      case "directory-to-system":
+        set({ view: "system", transition: null });
         break;
     }
   },

@@ -12,6 +12,13 @@ import { useSpace } from "@/lib/store";
 const ZOOM_AXIS = SYSTEM_CAMERA_POSITION.clone().normalize();
 
 /**
+ * Where the camera parks for the technical directory: off to the side, far
+ * enough that the whole system sits behind the lens. Looking radially outward
+ * from here (position × 2) points into empty starfield — no bodies in frame.
+ */
+const DIRECTORY_CAMERA_POSITION = new THREE.Vector3(48, 34, 52);
+
+/**
  * Distance at which a sphere of `radius` overfills the viewport in BOTH axes
  * (so no stars peek at the edges): the sphere's angular radius must beat the
  * larger of the vertical/horizontal half-fovs, divided by an overfill margin.
@@ -97,6 +104,16 @@ export default function CameraRig({ bodies }: { bodies: Body[] }) {
       case "undock":
         toPos.copy(SYSTEM_CAMERA_POSITION);
         duration = 1.8;
+        break;
+      case "to-directory":
+        // Drift out into the void; look radially away so only stars are framed.
+        toPos.copy(DIRECTORY_CAMERA_POSITION);
+        toLook.copy(DIRECTORY_CAMERA_POSITION).multiplyScalar(2);
+        duration = 2.4;
+        break;
+      case "directory-to-system":
+        toPos.copy(SYSTEM_CAMERA_POSITION);
+        duration = 2.0;
         break;
     }
 

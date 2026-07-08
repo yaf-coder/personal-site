@@ -202,13 +202,8 @@ export default function System({ bodies }: { bodies: Body[] }) {
       const label = labelRefs.current[i];
       if (label) {
         label.visible = showLabels;
-        if (showLabels) {
-          label.position.set(
-            body.position.x,
-            body.position.y + body.radius * 1.5,
-            body.position.z,
-          );
-        }
+        // Arc is centered on the planet, so anchor the label at its center.
+        if (showLabels) label.position.copy(body.position);
       }
     }
   });
@@ -241,17 +236,19 @@ export default function System({ bodies }: { bodies: Body[] }) {
           onSelect={i === 0 ? goHome : () => dock(body.id)}
         />
       ))}
-      {bodies.map((body, i) =>
-        i === 0 ? null : (
-          <PlanetLabel
-            key={`label-${body.id}`}
-            body={body}
-            ref={(el) => {
-              labelRefs.current[i] = el;
-            }}
-          />
-        ),
-      )}
+      {bodies.map((body, i) => (
+        <PlanetLabel
+          key={`label-${body.id}`}
+          body={body}
+          // The star dwarfs the planets — shrink its HOME label to clear the
+          // orbits, and space the letters out so HOME doesn't crowd itself.
+          sizeFactor={i === 0 ? 0.42 : undefined}
+          charAdvance={i === 0 ? 0.95 : undefined}
+          ref={(el) => {
+            labelRefs.current[i] = el;
+          }}
+        />
+      ))}
     </>
   );
 }
